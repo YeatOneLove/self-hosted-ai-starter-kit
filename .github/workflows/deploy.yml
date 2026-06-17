@@ -35,6 +35,15 @@ jobs:
           port: 22
           script: |
             set -e
+
+            # Install Docker if not present
+            if ! command -v docker &> /dev/null; then
+              echo "Installing Docker..."
+              curl -fsSL https://get.docker.com | sh
+              systemctl enable docker
+              systemctl start docker
+            fi
+
             cd /opt/self-hosted-ai
 
             # Write .env from secrets (only on first deploy or when secrets change)

@@ -20,7 +20,7 @@ jobs:
         with:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USERNAME }}
-          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+          password: ${{ secrets.DO_PASSWORD }}
           port: 22
           source: "docker-compose.yml,n8n/,shared/"
           target: "/opt/self-hosted-ai"
@@ -31,7 +31,7 @@ jobs:
         with:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USERNAME }}
-          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+          password: ${{ secrets.DO_PASSWORD }}
           port: 22
           script: |
             set -e

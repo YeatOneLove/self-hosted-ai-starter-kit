@@ -1,0 +1,56 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy via SSH
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy files to Droplet
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USERNAME }}
+          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+          port: 22
+          source: "docker-compose.yml,n8n/,shared/"
+          target: "/opt/self-hosted-ai"
+          strip_components: 0
+
+      - name: Deploy with Docker Compose
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USERNAME }}
+          key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            set -e
+            cd /opt/self-hosted-ai
+
+            # Write .env from secrets (only on first deploy or when secrets change)
+            cat > .env <<'ENVEOF'
+            POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+            N8N_ENCRYPTION_KEY=${{ secrets.N8N_ENCRYPTION_KEY }}
+            N8N_USER_MANAGEMENT_JWT_SECRET=${{ secrets.N8N_USER_MANAGEMENT_JWT_SECRET }}
+            ENVEOF
+
+            # Pull latest images
+            docker compose pull
+
+            # Start / update stack (cpu profile — change to gpu-nvidia if your Droplet has a GPU)
+            docker compose --profile cpu up -d --remove-orphans
+
+            # Remove dangling images to free disk space
+            docker image prune -f

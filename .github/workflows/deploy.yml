@@ -33,6 +33,8 @@ jobs:
           username: ${{ secrets.DO_USERNAME }}
           password: ${{ secrets.DO_PASSWORD }}
           port: 22
+          # Ollama image is several GB — give the background script enough time
+          command_timeout: 60m
           script: |
             set -e
 
@@ -46,8 +48,8 @@ jobs:
 
             cd /opt/self-hosted-ai
 
-            # Write .env from secrets (only on first deploy or when secrets change)
-            cat > .env <<'ENVEOF'
+            # Write .env from secrets
+            cat > .env <<ENVEOF
             POSTGRES_USER=${{ secrets.POSTGRES_USER }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             POSTGRES_DB=${{ secrets.POSTGRES_DB }}
@@ -55,11 +57,20 @@ jobs:
             N8N_USER_MANAGEMENT_JWT_SECRET=${{ secrets.N8N_USER_MANAGEMENT_JWT_SECRET }}
             ENVEOF
 
-            # Pull latest images
-            docker compose pull
+            # Run the heavy lifting in the background so SSH session can exit cleanly.
+            # Logs go to /opt/self-hosted-ai/deploy.log — check there if anything goes wrong.
+            nohup bash -c '
+              set -e
+              cd /opt/self-hosted-ai
 
-            # Start / update stack (cpu profile — change to gpu-nvidia if your Droplet has a GPU)
-            docker compose --profile cpu up -d --remove-orphans
+              # Pull images quietly (suppresses the per-byte extraction spam)
+              docker compose pull --quiet 2>&1 | grep -v "^err:  " || true
 
-            # Remove dangling images to free disk space
-            docker image prune -f
+              # Start / update stack
+              docker compose up -d --remove-orphans
+
+              # Clean up dangling images
+              docker image prune -f
+            ' > /opt/self-hosted-ai/deploy.log 2>&1 &
+
+            echo "Deploy started in background (PID $!). Tail /opt/self-hosted-ai/deploy.log on the Droplet to follow progress."
